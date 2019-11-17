@@ -1,4 +1,5 @@
 edgemaze.c
+edgemaze.cpp
 setup.py
 edgemaze.egg-info/PKG-INFO
 edgemaze.egg-info/SOURCES.txt

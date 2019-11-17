@@ -4,7 +4,7 @@ import numpy
 
 setup(
     name='edgemaze',
-    ext_modules=cythonize('edgemaze.pyx', language_level=3),
+    ext_modules=cythonize('edgemaze.pyx', language="c++"),
     include_dirs=[numpy.get_include()],
     setup_requires=[
         'Cython',
