@@ -1,60 +1,46 @@
-# import queue
-
-
-
 import cython
 import numpy
 cimport numpy
 from libcpp.queue cimport queue
 
-
-class HitError(ValueError):
-    pass
-
-
-class WallHitError(HitError):
-    pass
-
-
-class BorderHitError(HitError):
-    pass
-
-
 IS_TARGET = 1
 WALL_LEFT = 2
 WALL_UP = 4
 
+cdef struct loc:
+    int x
+    int y
 
-def up(numpy.ndarray maze, int x, int y, check_walls=True):
+cpdef loc up(numpy.ndarray maze, int x, int y, check_walls=True):
     if x == 0:
-        raise BorderHitError
+        return loc(-10, -10)
     if check_walls and maze[x, y] & WALL_UP:
-        raise WallHitError
-    return x - 1, y
+        return loc(-10, -10)
+    return loc(x - 1, y)
 
 
-def down(numpy.ndarray maze, int x, int y, check_walls=True):
+cpdef loc down(numpy.ndarray maze, int x, int y, check_walls=True):
     if x == (maze.shape[0] - 1):
-        raise BorderHitError
+        return loc(-10, -10)
     if check_walls and maze[x + 1, y] & WALL_UP:
-        raise WallHitError
-    return x + 1, y
+        return loc(-10, -10)
+    return loc(x + 1, y)
 
 
-def left(numpy.ndarray maze, int x, int y, check_walls=True):
+cpdef loc left(numpy.ndarray maze, int x, int y, check_walls=True):
     if y == 0:
-        raise BorderHitError
+        return loc(-10, -10)
     if check_walls and maze[x, y] & WALL_LEFT:
-        raise WallHitError
-    return x, y - 1
+        return loc(-10, -10)
+    return loc(x, y - 1)
 
 
-def right(numpy.ndarray maze, int x, int y, check_walls=True):
+cpdef loc right(numpy.ndarray maze, int x, int y, check_walls=True):
     if y == (maze.shape[1] - 1):
-        raise BorderHitError
+        return loc(-10, -10)
     if check_walls and maze[x, y + 1] & WALL_LEFT:
-        raise WallHitError
-    return x, y + 1
+        return loc(-10, -10)
+    return loc(x, y + 1)
 
 
 def ends(numpy.ndarray maze):
@@ -78,25 +64,18 @@ ANTIDIRS = {
 UNREACHABLE = b' '
 TARGET = b'X'
 
-
 def arrows_to_path(numpy.ndarray arrows, int x, int y):
     if arrows[x, y] == UNREACHABLE:
         raise ValueError('Cannot construct path for unreachable cell')
     path = [(x, y)]
+    cdef loc nloc
 
-    nloc = x, y
-    while arrows[nloc[0], nloc[1]] != TARGET:
-        nloc = DIRS[arrows[nloc]](arrows, nloc[0], nloc[1], check_walls=False)
-        path.append(nloc)
+    nloc = loc(x, y)
+    while arrows[nloc.x, nloc.y] != TARGET:
+        nloc = DIRS[arrows[nloc.x, nloc.y]](arrows, nloc.x, nloc.y, check_walls=False)
+        path.append((nloc.x, nloc.y))
 
     return path
-
-
-def smallest_dtype(int value):
-    for dtype in numpy.int8, numpy.int16, numpy.int32, numpy.int64:
-        if dtype(value) == value:
-            return dtype
-    raise ValueError(f'Maze of size {value} is too big for NumPy to handle')
 
 cdef struct job:
     int x
@@ -114,35 +93,31 @@ def flood(numpy.ndarray maze):
     cdef numpy.ndarray[numpy.int8_t, ndim=2] directions
     cdef int locx, locy
 
-    # dtype = smallest_dtype(maze.size)
     distances = numpy.full((maze.shape[0], maze.shape[1]), -1, dtype=numpy.int64)
     directions = numpy.full((maze.shape[0], maze.shape[1]), UNREACHABLE, dtype=('a', 1))
 
-    # jobs = queue.Queue()
     cdef queue[job] jobs
     cdef job j
+    cdef loc newloc
     for end in ends(maze):
         directions[end[0], end[1]] = TARGET
         distances[end[0], end[1]] = 0
-        # jobs.put((end[0], end[1], 1))
         jobs.push(job(end[0], end[1], 1))
 
     while not jobs.empty():
-        # locx, locy, dist = jobs.get()
         j = jobs.front()
         jobs.pop()
         for walk in [up, left, right, down]:
-            try:
-                newloc = walk(maze, j.x, j.y)
-            except HitError:
+            newloc = walk(maze, j.x, j.y)
+            if newloc.x == -10 and newloc.y == -10:
                 pass
             else:
                 # Been there better
-                if 0 <= distances[newloc] <= j.dist:
+                if 0 <= distances[newloc.x, newloc.y] <= j.dist:
                     continue
-                distances[newloc] = j.dist
-                directions[newloc] = ANTIDIRS[walk]
-                jobs.push(job(newloc[0], newloc[1], j.dist+1))
+                distances[newloc.x, newloc.y] = j.dist
+                directions[int(newloc.x), int(newloc.y)] = ANTIDIRS[walk]
+                jobs.push(job(newloc.x, newloc.y, j.dist+1))
         
     return distances, directions
 

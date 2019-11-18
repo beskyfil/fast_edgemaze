@@ -1,8 +1,0 @@
-edgemaze.c
-edgemaze.cpp
-setup.py
-edgemaze.egg-info/PKG-INFO
-edgemaze.egg-info/SOURCES.txt
-edgemaze.egg-info/dependency_links.txt
-edgemaze.egg-info/requires.txt
-edgemaze.egg-info/top_level.txt
