@@ -54,16 +54,8 @@ DIRS = {
     b'v': down,
 }
 
-ANTIDIRS = {
-    down: b'^',
-    right: b'<',
-    left: b'>',
-    up: b'v'
-}
-
 UNREACHABLE = b' '
 TARGET = b'X'
-
 def arrows_to_path(numpy.ndarray arrows, int x, int y):
     if arrows[x, y] == UNREACHABLE:
         raise ValueError('Cannot construct path for unreachable cell')
@@ -84,10 +76,7 @@ cdef struct job:
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def flood(numpy.ndarray maze):
-    if maze.ndim != 2 or not numpy.issubdtype(maze.dtype, numpy.integer):
-        raise TypeError('maze must be a 2-dimensional array of integers')
-
+def flood(numpy.ndarray[numpy.int8_t, ndim=2] maze):
     # Initialize everything as unreachable
     cdef numpy.ndarray[numpy.int64_t, ndim=2] distances
     cdef numpy.ndarray[numpy.int8_t, ndim=2] directions
@@ -107,16 +96,49 @@ def flood(numpy.ndarray maze):
     while not jobs.empty():
         j = jobs.front()
         jobs.pop()
-        for walk in [up, left, right, down]:
-            newloc = walk(maze, j.x, j.y)
-            if newloc.x == -10 and newloc.y == -10:
-                pass
-            else:
-                # Been there better
-                if 0 <= distances[newloc.x, newloc.y] <= j.dist:
-                    continue
+
+        if j.x == 0 or (maze[j.x, j.y] & WALL_UP):
+            newloc = loc(-10, -10)
+        else:
+            newloc = loc(j.x - 1, j.y)
+
+        if not (newloc.x == -10 and newloc.y == -10):
+            if not (0 <= distances[newloc.x, newloc.y] <= j.dist):
                 distances[newloc.x, newloc.y] = j.dist
-                directions[int(newloc.x), int(newloc.y)] = ANTIDIRS[walk]
+                directions[newloc.x, newloc.y] = b'v'
+                jobs.push(job(newloc.x, newloc.y, j.dist+1))
+
+        if j.y == 0 or (maze[j.x, j.y] & WALL_LEFT):
+            newloc = loc(-10, -10)
+        else:
+            newloc = loc(j.x, j.y - 1)
+
+        if not (newloc.x == -10 and newloc.y == -10):
+            if not (0 <= distances[newloc.x, newloc.y] <= j.dist):
+                distances[newloc.x, newloc.y] = j.dist
+                directions[newloc.x, newloc.y] = b'>'
+                jobs.push(job(newloc.x, newloc.y, j.dist+1))
+
+        if j.y == (maze.shape[1] - 1) or (maze[j.x, j.y + 1] & WALL_LEFT):
+            newloc = loc(-10, -10)
+        else:
+            newloc = loc(j.x, j.y + 1)
+
+        if not (newloc.x == -10 and newloc.y == -10):
+            if not (0 <= distances[newloc.x, newloc.y] <= j.dist):
+                distances[newloc.x, newloc.y] = j.dist
+                directions[newloc.x, newloc.y] = b'<'
+                jobs.push(job(newloc.x, newloc.y, j.dist+1))
+
+        if j.x == (maze.shape[0] - 1) or (maze[j.x + 1, j.y] & WALL_UP):
+            newloc = loc(-10, -10)
+        else:
+            newloc = loc(j.x + 1, j.y)
+
+        if not (newloc.x == -10 and newloc.y == -10):
+            if not (0 <= distances[newloc.x, newloc.y] <= j.dist):
+                distances[newloc.x, newloc.y] = j.dist
+                directions[newloc.x, newloc.y] = b'^'
                 jobs.push(job(newloc.x, newloc.y, j.dist+1))
         
     return distances, directions
@@ -131,7 +153,7 @@ class AnalyzedMaze:
         cdef numpy.ndarray[numpy.int64_t, ndim=2] distances
         cdef numpy.ndarray[numpy.int8_t, ndim=2] directions
         self.maze = maze
-        self.distances, self.directions = flood(maze)
+        self.distances, self.directions = flood(maze.astype(numpy.int8, copy=False))
         self.is_reachable = is_reachable(self.directions)
 
     def path(self, column, row):
@@ -139,4 +161,6 @@ class AnalyzedMaze:
 
 
 def analyze(maze):
+    if maze.ndim != 2 or not numpy.issubdtype(maze.dtype, numpy.integer):
+        raise TypeError('maze must be a 2-dimensional array of integers')
     return AnalyzedMaze(maze)
